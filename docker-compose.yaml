@@ -1,0 +1,30 @@
+
+services:
+  django_chatapp:
+    container_name: django_chatapp
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_NAME=postgres
+      - DB_HOST=django_chat_db
+      - DB_PORT=5432
+
+    depends_on:
+      - django_chat_db
+  django_chat_db:
+    container_name: django_chat_db
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=postgres
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - "5433:5432"
+
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+volumes:
+  pgdata: {}
