@@ -17,7 +17,27 @@ class ChatRoomSerializer(serializers.ModelSerializer):
 
 
 class MessageSerializer(serializers.ModelSerializer):
+    is_sender = serializers.SerializerMethodField()
+    username = serializers.CharField(source="user.username", read_only=True)
+    room_identifier = serializers.CharField(
+        source="room.room_identifier", read_only=True
+    )
+
     class Meta:
         model = Message
-        fields = "__all__"
-        read_only_fields = ["user", "timestamp"]
+        fields = [
+            "id",
+            "content",
+            "timestamp",
+            "room",
+            "room_identifier",
+            "username",
+            "is_sender",
+        ]
+
+    def get_is_sender(self, obj):
+        # Get the request user from context
+        request = self.context.get("request")
+        if request and hasattr(request, "user"):
+            return obj.user == request.user
+        return False

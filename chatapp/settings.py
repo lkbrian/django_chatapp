@@ -27,7 +27,8 @@ SECRET_KEY = "django-insecure-!5cz3(bidzrzqgnp50hj4rze-%2zjs5c6q12dnl4*te1la4-1$
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["18.215.152.110", "localhost", "127.0.0.1"]
+
 CORS_ALLOW_ALL_ORIGINS = True
 
 
@@ -99,8 +100,8 @@ CHANNEL_LAYERS = {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
             "hosts": [
-                ("redis-12412.c321.us-east-1-2.ec2.redns.redis-cloud.com", 12412)
-            ],  # Redis server
+                f"redis://:{os.getenv('REDIS_PASSWORD', 'EsYv8xGgyF1gdHwAHwe0kMF3u9sAqXtB')}@redis-15958.c98.us-east-1-4.ec2.redns.redis-cloud.com:15958"
+            ],
         },
     },
 }

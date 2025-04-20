@@ -1,6 +1,7 @@
 # Create your views here.
 # from os import error
 from django.contrib.auth import get_user_model
+import requests
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -8,8 +9,12 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import ChatRoom, Message
-from .serializers import ChatRoomSerializer, MessageSerializer
-from .utils import generate_random_titles, generate_username_suggestions
+from .serializers import ChatRoomSerializer, MessageSerializer, UserSerializer
+from .utils import (
+    generate_random_titles,
+    generate_username_suggestions,
+    replace_existing_google_username,
+)
 from django.utils.timezone import make_aware
 from django.utils.dateparse import parse_datetime
 
@@ -24,6 +29,58 @@ class check_username(APIView):
             return Response({"available": False, "suggestions": suggestions})
 
         return Response({"available": True})
+
+
+class GoogleLoginView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        access_token = request.data.get("access_token")
+        if not access_token:
+            return Response({"error": "Access token is required"}, status=400)
+
+        # Verify token with Google
+        google_user_info_url = "https://www.googleapis.com/oauth2/v3/userinfo"
+        response = requests.get(
+            google_user_info_url, headers={"Authorization": f"Bearer {access_token}"}
+        )
+
+        if response.status_code != 200:
+            return Response({"error": "Failed to authenticate with Google"}, status=400)
+
+        user_info = response.json()
+        email = user_info.get("email")
+        google_username = user_info.get("sub")
+        username = replace_existing_google_username(google_username)
+
+        if not email:
+            return Response({"error": "Email not provided by Google"}, status=400)
+
+        # Get or create user
+        User = get_user_model()
+        user = User.objects.filter(email=email).first()
+
+        if not user:
+            username = replace_existing_google_username(google_username)
+            user = User.objects.create(
+                email=email,
+                username=username,
+            )
+            user.set_unusable_password()
+            user.save()
+
+        user_data = UserSerializer(user)
+        refresh = RefreshToken.for_user(user)
+
+        return Response(
+            {
+                "message": "Google login successful",
+                "access_token": str(refresh.access_token),
+                "refresh_token": str(refresh),
+                "user": user_data.data,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class CheckTitleAvailability(APIView):
@@ -116,18 +173,20 @@ class LoginView(APIView):
             if user and user.check_password(password):
                 refresh = RefreshToken.for_user(user)
                 access_token = str(refresh.access_token)
-
+                user_data = UserSerializer(user)
                 return Response(
                     {
                         "message": "Login successful",
                         "access_token": access_token,
                         "refresh_token": str(refresh),
+                        "user": user_data.data,
                     },
                     status=status.HTTP_200_OK,
                 )
             else:
                 return Response(
-                    {"error": "Invalid credentials"}, status=status.HTTP_400_BAD_REQUEST
+                    {"message": "Invalid credentials"},
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
         except Exception as e:
             error_message = str(e.orig)
@@ -290,7 +349,14 @@ class ChatRoomView(APIView):
 class MessageView(APIView):
     def get(self, request, pk=None):
         messages = Message.objects.all()
-        serializer = MessageSerializer(messages, many=True)
+
+        # Annotate each message with is_sender status
+        for message in messages:
+            message.is_sender = message.user == request.user
+
+        serializer = MessageSerializer(
+            messages, many=True, context={"request": request}
+        )
         return Response(serializer.data)
 
     def post(self, request):

@@ -14,16 +14,17 @@ from .views import (
 
 
 urlpatterns = [
-    path("register/", RegisterView.as_view(), name="register"),
-    path("login/", LoginView.as_view(), name="login"),
-    path("check_username/", check_username.as_view(), name="check_username"),
-    path("logout/", LogoutView.as_view(), name="logout"),
-    path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
-    path("chatroom/", ChatRoomView.as_view(), name="chatroom"),
-    path("check_title/", CheckTitleAvailability.as_view(), name="check_title"),
-    path("message/", MessageView.as_view(), name="message"),
+    path("auth/register/", RegisterView.as_view(), name="register"),
+    path("auth/login/", LoginView.as_view(), name="login"),
+    path("auth/login/google/", LoginView.as_view(), name="login"),
+    path("auth/check_username/", check_username.as_view(), name="check_username"),
+    path("auth/logout/", LogoutView.as_view(), name="logout"),
+    path("auth/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
+    path("chat/chatroom/", ChatRoomView.as_view(), name="chatroom"),
+    path("chat/check_title/", CheckTitleAvailability.as_view(), name="check_title"),
+    path("chat/message/", MessageView.as_view(), name="message"),
     path(
-        "messages/infinite/",
+        "chat/messages/infinite/",
         MessageViewWithInfiniteScroll.as_view(),
         name="message_scroll",
     ),

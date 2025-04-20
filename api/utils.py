@@ -36,3 +36,22 @@ def generate_random_titles(base_name, count=5):
         attempts += 1
 
     return list(titles)
+
+
+def replace_existing_google_username(base_name):
+    User = get_user_model()
+    attempts = 0
+    max_attempts = 50
+
+    if not User.objects.filter(username=base_name).exists():
+        return base_name
+
+    while attempts < max_attempts:
+        random_suffix = uuid.uuid4().hex[:4]
+        username = f"{base_name}_{random_suffix}"
+        if not User.objects.filter(username=username).exists():
+            return username
+        attempts += 1
+
+    # Fallback if somehow all attempts fail
+    return f"{base_name}_{uuid.uuid4().hex[:6]}"
