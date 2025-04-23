@@ -22,7 +22,7 @@ urlpatterns = [
     path("auth/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("chat/chatroom/", ChatRoomView.as_view(), name="chatroom"),
     path("chat/check_title/", CheckTitleAvailability.as_view(), name="check_title"),
-    path("chat/message/", MessageView.as_view(), name="message"),
+    path("chat/message", MessageView.as_view(), name="message"),
     path(
         "chat/messages/infinite/",
         MessageViewWithInfiniteScroll.as_view(),

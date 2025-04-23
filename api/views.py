@@ -17,11 +17,19 @@ from .utils import (
 )
 from django.utils.timezone import make_aware
 from django.utils.dateparse import parse_datetime
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 
 
 class check_username(APIView):
+    permission_classes = [AllowAny]
+
     def get(self, request):
-        username = request.GET.get("username", "")
+        username = request.query_params.get("username")
+        if not username:
+            return Response(
+                {"message": "provider data"}, status=status.HTTP_400_BAD_REQUEST
+            )
         User = get_user_model()
 
         if User.objects.filter(username=username).exists():
@@ -347,7 +355,7 @@ class ChatRoomView(APIView):
 
 
 class MessageView(APIView):
-    def get(self, request, pk=None):
+    def get(self, request):
         messages = Message.objects.all()
 
         # Annotate each message with is_sender status
@@ -402,7 +410,13 @@ class MessageViewWithInfiniteScroll(APIView):
                 {"error": "Room ID is required"}, status=status.HTTP_400_BAD_REQUEST
             )
 
-        messages = Message.objects.filter(room_id=room_id)
+        chat_room = ChatRoom.objects.filter(pk=room_id).first()
+        if not chat_room:
+            return Response(
+                {"error": "Chat room not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        messages = Message.objects.filter(room_id=room_id)[:limit]
 
         if before:
             try:
@@ -423,7 +437,61 @@ class MessageViewWithInfiniteScroll(APIView):
                     {"error": "Invalid 'after' timestamp"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+        for message in messages:
+            message.is_sender = message.user == request.user
 
-        messages = messages.order_by("-timestamp")[:limit]
-        serializer = MessageSerializer(messages, many=True)
+        serializer = MessageSerializer(
+            messages, many=True, context={"request": request}
+        )
         return Response(serializer.data)
+
+
+class SendMessageAPIView(APIView):
+    def post(self, request):
+        data = request.data
+        try:
+            room_id = data.get("room")
+            content = data.get("content")
+            user = request.user
+
+            # Validate inputs
+            if not room_id or not content or not user:
+                return Response(
+                    {"error": "Room, content and user (all three) are required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Get the chat room based on the room ID
+            chat_room = ChatRoom.objects.filter(pk=room_id).first()
+            if not chat_room:
+                return Response(
+                    {"error": "Chat room not found"}, status=status.HTTP_404_NOT_FOUND
+                )
+
+            # Save the message to the database
+            message = Message.objects.create(room=chat_room, user=user, content=content)
+
+            # Broadcast the saved message to WebSocket clients
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                f"chat_{chat_room.room_identifier}",  # The group name based on room identifier
+                {
+                    "type": "chat_message",
+                    "content": message.content,
+                    "user": user.username,
+                    "timestamp": message.timestamp.isoformat(),
+                    "id": message.id,
+                    "is_sender": True,  # Mark the sender's message as true
+                },
+            )
+
+            # Return the message details in the response, including the timestamp and ID
+            serializer = MessageSerializer(message)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            error_message = str(e)
+            return Response(
+                {"error": f"An error occurred: {error_message}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
